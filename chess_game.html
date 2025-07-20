@@ -333,10 +333,32 @@
             }
         }
 
+        @media (max-width: 768px) {
+            .promotion-piece {
+                width: 45px;
+                height: 45px;
+                font-size: 24px;
+            }
+            
+            .promotion-pieces {
+                gap: 10px;
+            }
+        }
+
         .illegal-move {
             background-color: rgba(255, 0, 0, 0.3) !important;
             border: 2px solid #ff0000;
             animation: shake 0.3s ease-in-out;
+        }
+
+        .valid-move-gold {
+            background-color: rgba(255, 215, 0, 0.4) !important;
+            border: 2px solid #DAA520;
+        }
+
+        .valid-move-red {
+            background-color: rgba(220, 20, 60, 0.4) !important;
+            border: 2px solid #DC143C;
         }
 
         @keyframes shake {
@@ -666,6 +688,11 @@
             <h1>Chess Game</h1>
             <div class="game-status gold-turn" id="gameStatus">Gold to move</div>
         </div>
+        <div class="chess-timer">
+            <div id="timerGold" class="timer-display timer-gold">05:00</div>
+            <div id="timerRed" class="timer-display timer-red">05:00</div>
+        </div>
+
         
         <div class="chess-board" id="chessBoard"></div>
         
