@@ -47,11 +47,11 @@ let positionHistory = [];
 let halfMoveClock = 0; // For navigation through move history
 
 let gameTimer = {
-    white: 600000, // 10 minutes in milliseconds
-    black: 600000,
-    currentStart: null,
-    interval: null
+  w: 300,
+  b: 300,
+  interval: null
 };
+
 
 const moveCache = new Map();
 
@@ -844,7 +844,30 @@ function makeMove(fromRow, fromCol, toRow, toCol) {
     }
     
     // CRITICAL: Update board visual immediately
-    createBoard();
+    updateBoardPieces();
+    // Ensure the timer starts when the first move is made
+    if (!gameTimer.interval) {
+        startTimer();
+    }
+
+
+}
+
+function updateBoardPieces() {
+    for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+            const square = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+            if (square) {
+                if (board[row][col]) {
+                    square.textContent = pieces[board[row][col]];
+                    square.style.cssText = board[row][col][0] === 'w' ? goldPieceStyle : redPieceStyle;
+                } else {
+                    square.textContent = '';
+                    square.style.cssText = '';
+                }
+            }
+        }
+    }
 }
 
 function trackGameState() {
@@ -878,38 +901,46 @@ function getDetailedGameStatus() {
 }
 
 // Add to your existing code
-function initializeTournamentTimer(whiteTime = 900000, blackTime = 900000) {
+function initializeTournamentTimer(wTime = 300, bTime = 300) {
     gameTimer = {
-        white: whiteTime, // 15 minutes default
-        black: blackTime,
-        currentStart: Date.now(),
-        interval: null,
-        increment: 0 // Fischer increment
+        w: wTime,   // white
+        b: bTime,   // black
+        interval: null
     };
-    startTimer();
+    gameStarted = true;
+    gameOver = false;
+    updateTimerDisplay();
 }
 
+
 function startTimer() {
-    if (gameTimer.interval) clearInterval(gameTimer.interval);
-    
+    // Always clear any existing interval first
+    if (gameTimer.interval) {
+        clearInterval(gameTimer.interval);
+        gameTimer.interval = null;
+    }
+
     gameTimer.interval = setInterval(() => {
         if (!gameOver && gameStarted) {
-            const elapsed = Date.now() - gameTimer.currentStart;
-            if (currentPlayer === 'w') {
-                gameTimer.white = Math.max(0, gameTimer.white - elapsed);
-            } else {
-                gameTimer.black = Math.max(0, gameTimer.black - elapsed);
+            if (typeof gameTimer[currentPlayer] !== 'number') {
+                console.error("Invalid timer value for", currentPlayer, gameTimer);
+                clearInterval(gameTimer.interval);
+                gameTimer.interval = null;
+                return;
             }
-            gameTimer.currentStart = Date.now();
+
+            gameTimer[currentPlayer] = Math.max(0, gameTimer[currentPlayer] - 1);
             updateTimerDisplay();
-            
-            // Check for timeout
-            if (gameTimer.white <= 0 || gameTimer.black <= 0) {
-                handleTimeOut();
+
+            if (gameTimer[currentPlayer] <= 0) {
+                clearInterval(gameTimer.interval);
+                gameTimer.interval = null;
+                endGame(`${currentPlayer === 'w' ? 'Gold' : 'Red'} ran out of time!`);
             }
         }
-    }, 100);
+    }, 1000);
 }
+
 
 function handleSquareClick(row, col) {
     if (gameOver || pendingPromotion) return;
@@ -1047,6 +1078,24 @@ function closeGameOverDialog() {
     }
 }
 
+function highlightValidMoves(row, col) {
+    const piece = board[row][col];
+    const isWhitePiece = piece[0] === 'w';
+    const moveClass = isWhitePiece ? 'valid-move-gold' : 'valid-move-red';
+    
+    // Check all squares on the board for valid moves
+    for (let toRow = 0; toRow < 8; toRow++) {
+        for (let toCol = 0; toCol < 8; toCol++) {
+            if (isValidMove(row, col, toRow, toCol)) {
+                const targetSquare = document.querySelector(`[data-row="${toRow}"][data-col="${toCol}"]`);
+                if (targetSquare) {
+                    targetSquare.classList.add(moveClass);
+                }
+            }
+        }
+    }
+}
+
 function selectSquare(row, col) {
     selectedSquare = [row, col];
     const square = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
@@ -1056,7 +1105,7 @@ function selectSquare(row, col) {
 
 function clearSelection() {
     document.querySelectorAll('.square').forEach(square => {
-        square.classList.remove('selected', 'valid-move', 'attack-path-gold', 'attack-path-red');
+        square.classList.remove('selected', 'valid-move', 'valid-move-gold', 'valid-move-red', 'attack-path-gold', 'attack-path-red');
     });
     selectedSquare = null;
 }
@@ -1071,20 +1120,19 @@ const arbiterFunctions = {
     
     resumeGame() {
         if (gameTimer.paused) {
-            gameTimer.currentStart = Date.now();
             startTimer();
             gameTimer.paused = false;
         }
     },
     
     adjustTime(color, timeInMs) {
-        if (color === 'white') gameTimer.white = timeInMs;
-        else gameTimer.black = timeInMs;
+        // Convert display names to internal w/b
+        if (color === 'gold' || color === 'white') gameTimer.w = timeInMs;
+        else if (color === 'red' || color === 'black') gameTimer.b = timeInMs;
         updateTimerDisplay();
     },
     
     forceMove(fromSquare, toSquare) {
-        // Emergency move function for arbiter
         const [fromRow, fromCol] = parseSquare(fromSquare);
         const [toRow, toCol] = parseSquare(toSquare);
         if (isValidMove(fromRow, fromCol, toRow, toCol)) {
@@ -1092,32 +1140,6 @@ const arbiterFunctions = {
         }
     }
 };
-
-function highlightValidMoves(row, col) {
-    const piece = board[row][col];
-    const isGoldPiece = piece && piece[0] === 'w';
-
-    for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-            if (isValidMove(row, col, r, c)) {
-                const square = document.querySelector(`[data-row="${r}"][data-col="${c}"]`);
-                square.classList.add('valid-move');
-
-                // Add castling styling if it's a castling move
-                if (piece[1] === 'K' && Math.abs(col - c) === 2) {
-                    square.classList.add('castling-move');
-                }
-
-                // Add attack path styling
-                if (isGoldPiece) {
-                    square.classList.add('attack-path-gold');
-                } else {
-                    square.classList.add('attack-path-red');
-                }
-            }
-        }
-    }
-}
 
 
 function showCheckAlert(message) {
@@ -1352,6 +1374,25 @@ function isPathClear(fromRow, fromCol, toRow, toCol) {
     return true;
 }
 
+function updateTimerDisplay() {
+    const goldTimerEl = document.getElementById('timerGold');
+    const redTimerEl = document.getElementById('timerRed');
+
+    if (!goldTimerEl || !redTimerEl) return;
+
+    // Use w/b internally but display for gold/red elements
+    goldTimerEl.textContent = formatTime(gameTimer.w);  // w = gold/white
+    redTimerEl.textContent = formatTime(gameTimer.b);   // b = red/black
+
+    // Gold timer is active when white's turn, red when black's turn
+    goldTimerEl.classList.toggle('timer-active', currentPlayer === 'w');
+    redTimerEl.classList.toggle('timer-active', currentPlayer === 'b');
+}
+function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
 
 
 function updateGameStatus() {
@@ -1464,6 +1505,10 @@ function resetGame() {
     createBoard();
     updateGameStatus();
     updateMoveHistory();
+    initializeTournamentTimer(); // ⏱️ sets gold/red to 300s
+    startTimer();                // ▶️ starts ticking
+
+
 }
 
 function exportToPGN() {
@@ -1486,6 +1531,7 @@ function exportToPGN() {
     }
     
     return headers.join('\n') + '\n\n' + moves.join(' ');
+
 }
 
 function importFromPGN(pgnText) {
